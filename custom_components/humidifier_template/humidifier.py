@@ -236,7 +236,7 @@ class TemplateHumidifier(TemplateEntity, HumidifierEntity, RestoreEntity):
         )
         self.hass = hass
         self.entity_id = async_generate_entity_id(
-            ENTITY_ID_FORMAT, config[CONF_NAME], hass=hass
+            ENTITY_ID_FORMAT, config_name, hass=hass
         )
         self._config = config
         self._attr_name = config_name
@@ -304,7 +304,7 @@ class TemplateHumidifier(TemplateEntity, HumidifierEntity, RestoreEntity):
         # Check If we have an old state
         previous_state = await self.async_get_last_state()
         if previous_state is not None:
-            self._state = previous_state.state
+            self._state = previous_state.state == STATE_ON
 
             if mode := previous_state.attributes.get(
                 ATTR_MODE, MODE_NORMAL
@@ -314,17 +314,12 @@ class TemplateHumidifier(TemplateEntity, HumidifierEntity, RestoreEntity):
             if humidity := previous_state.attributes.get(
                 ATTR_HUMIDITY, DEFAULT_HUMIDITY
             ):
-                self._target_temp = humidity
+                self._target_humidity = humidity
 
-            if current_temperature := previous_state.attributes.get(
+            if current_humidity := previous_state.attributes.get(
                 ATTR_CURRENT_HUMIDITY
             ):
-                self._current_temp = current_temperature
-
-            if humidity := previous_state.attributes.get(
-                ATTR_CURRENT_HUMIDITY
-            ):
-                self._current_humidity = humidity
+                self._current_humidity = current_humidity
 
         # register templates
         if self._state_template:
@@ -517,16 +512,10 @@ class TemplateHumidifier(TemplateEntity, HumidifierEntity, RestoreEntity):
 
     @callback
     def _update_action(self, action):
-        if action not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-            try:
-                if not self._state:
-                    self._attr_action = HumidifierAction.OFF
-                else:
-                    self._attr_action = HumidifierAction.HUMIDIFYING
-                    if self._config.get(CONF_TYPE, HUMIDIFIER_TYPE) == DEHUMIDIFIER_TYPE:
-                        self._attr_action = HumidifierAction.DRYING
-                    if action == "fan":
-                        self._attr_action = HumidifierAction.IDLE
-            except ValueError:
-                _LOGGER.error("Could not parse action from %s", action)
+        if action in (STATE_UNKNOWN, STATE_UNAVAILABLE, None):
+            return
+        try:
+            self._attr_action = HumidifierAction(action)
+        except ValueError:
+            _LOGGER.error("Could not parse action from %s", action)
 
